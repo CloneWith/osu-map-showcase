@@ -1,0 +1,88 @@
+﻿// Copyright (c) CloneWith. Licensed under the MIT Licence.
+// See the LICENCE file in the repository root for full licence text.
+
+using System;
+using Newtonsoft.Json;
+using osu.Framework.Bindables;
+using osu.Game.Overlays;
+
+namespace osu.Game.Rulesets.MapShowcase.Models
+{
+    [Serializable]
+    public class ShowcaseConfig
+    {
+        /// <summary>
+        /// The filename of the config file.
+        /// <br/>This property should be updated <b>after deserialization</b>.
+        /// </summary>
+        [JsonIgnore]
+        public Bindable<string> Filename = new Bindable<string>();
+
+        /// <summary>
+        /// A fallback ruleset for the showcase.
+        /// <br/>When unable to find a specific ruleset using the ID provided by a <see cref="ShowcaseBeatmap"/>,
+        /// we can turn to use this.
+        /// </summary>
+        public Bindable<RulesetInfo> FallbackRuleset = new Bindable<RulesetInfo>();
+
+        public Bindable<string> TournamentName = new Bindable<string>();
+        public Bindable<string> RoundName = new Bindable<string>();
+        public Bindable<string> DateTime = new Bindable<string>();
+        public Bindable<string> Comment = new Bindable<string>();
+
+        /// <summary>
+        /// The duration of the countdown before showcase starts, in seconds.
+        /// </summary>
+        public BindableInt StartCountdown = new BindableInt(5000)
+        {
+            MinValue = 3000,
+            MaxValue = 30000,
+            Precision = 1000,
+        };
+
+        /// <summary>
+        /// The duration of transform animations between showcase beatmaps and screens.
+        /// </summary>
+        public BindableInt TransformDuration = new BindableInt(1000)
+        {
+            MinValue = 250,
+            MaxValue = 1500,
+            Precision = 50,
+        };
+
+        /// <summary>
+        /// The duration between the map pool disappears and the first replay is pushed, in seconds.
+        /// </summary>
+        public BindableInt FirstBeatmapDelay = new BindableInt(10)
+        {
+            MinValue = 5,
+            MaxValue = 20,
+            Precision = 1,
+        };
+
+        public Bindable<OverlayColourScheme> ColourScheme = new Bindable<OverlayColourScheme>(OverlayColourScheme.Blue);
+
+        public BindableFloat AspectRatio = new BindableFloat(1)
+        {
+            MinValue = 0.6f,
+            MaxValue = 3f,
+            Precision = 0.1f,
+        };
+
+        public BindableList<ShowcaseBeatmap> Beatmaps = new BindableList<ShowcaseBeatmap>();
+
+        public Bindable<ShowcaseLayout> Layout = new Bindable<ShowcaseLayout>();
+
+        public BindableBool UseCustomIntroBeatmap = new BindableBool();
+        public Bindable<ShowcaseBeatmap> IntroBeatmap = new Bindable<ShowcaseBeatmap>();
+
+        public BindableBool ShowMapPool = new BindableBool(true);
+        public BindableBool SplitMapPoolByMods = new BindableBool(true);
+
+        public Bindable<string> OutroTitle = new Bindable<string>();
+        public Bindable<string> OutroSubtitle = new Bindable<string>();
+
+        public Bindable<DateTime?> LastEdited = new Bindable<DateTime?>();
+        public Bindable<DateTime?> LastPlayed = new Bindable<DateTime?>();
+    }
+}

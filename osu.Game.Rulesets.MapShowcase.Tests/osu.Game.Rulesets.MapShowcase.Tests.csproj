@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup Label="Project">
+    <TargetFramework>net10.0</TargetFramework>
+    <!--
+      WinExe (rather than Library) so that `dotnet run` opens the visual test browser without a console window
+      hanging around on Windows, matching how upstream osu! test projects are configured.
+    -->
+    <OutputType>WinExe</OutputType>
+    <AssemblyTitle>osu.Game.Rulesets.MapShowcase.Tests</AssemblyTitle>
+    <RootNamespace>osu.Game.Rulesets.MapShowcase.Tests</RootNamespace>
+    <Nullable>enable</Nullable>
+    <LangVersion>14.0</LangVersion>
+    <StartupObject>osu.Game.Rulesets.MapShowcase.Tests.VisualTestRunner</StartupObject>
+    <!-- NUnit generates the entry point otherwise, which would clash with VisualTestRunner. -->
+    <GenerateProgramFile>false</GenerateProgramFile>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup Label="Package References">
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.12.0" />
+    <PackageReference Include="NUnit" Version="4.6.1" />
+    <PackageReference Include="NUnit3TestAdapter" Version="6.3.1" />
+  </ItemGroup>
+  <ItemGroup Label="Project References">
+    <ProjectReference Include="..\osu.Game.Rulesets.MapShowcase\osu.Game.Rulesets.MapShowcase.csproj" />
+  </ItemGroup>
+</Project>

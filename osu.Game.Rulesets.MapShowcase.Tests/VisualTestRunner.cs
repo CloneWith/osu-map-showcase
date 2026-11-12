@@ -1,0 +1,22 @@
+﻿// Copyright (c) CloneWith. Licensed under the MIT Licence.
+// See the LICENCE file in the repository root for full licence text.
+
+using System;
+using osu.Framework;
+using osu.Framework.Platform;
+using osu.Game.Tests;
+
+namespace osu.Game.Rulesets.MapShowcase.Tests
+{
+    public static class VisualTestRunner
+    {
+        [STAThread]
+        public static int Main()
+        {
+            using DesktopGameHost host = Host.GetSuitableDesktopHost(@"showcase-development");
+
+            host.Run(new OsuTestBrowser());
+            return 0;
+        }
+    }
+}

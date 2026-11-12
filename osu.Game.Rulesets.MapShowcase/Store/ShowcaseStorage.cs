@@ -1,0 +1,115 @@
+﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh> & CloneWith. Licensed under the MIT Licence.
+// See the LICENCE file in the repository root for full licence text.
+
+using System;
+using System.Collections.Generic;
+using System.IO;
+using Newtonsoft.Json;
+using osu.Framework.Logging;
+using osu.Framework.Platform;
+using osu.Game.IO;
+using osu.Game.Rulesets.MapShowcase.Utils;
+
+namespace osu.Game.Rulesets.MapShowcase.Store
+{
+    public class ShowcaseStorage(Storage storage) : WrappedStorage(storage.GetStorageForDirectory("showcase"), string.Empty)
+    {
+        public event Action? OnProfileChange;
+
+        private readonly Storage storage = storage.GetStorageForDirectory("showcase");
+
+        public void TriggerProfileChange() => OnProfileChange?.Invoke();
+
+        public ShowcaseConfig? GetConfig(string name)
+        {
+            if (!storage.Exists(name))
+            {
+                Logger.Error(null, $"Cannot found showcase profile \"{name}\".");
+                return null;
+            }
+
+            using Stream stream = storage.GetStream(name, FileAccess.Read, FileMode.Open);
+            using var sr = new StreamReader(stream);
+
+            try
+            {
+                // TODO: Need an async Task?
+                var config = JsonConvert.DeserializeObject<ShowcaseConfig>(sr.ReadToEnd());
+
+                // Append filename information after deserialization.
+                config?.Filename.Value = name;
+
+                return config;
+            }
+            catch (Exception e)
+            {
+                Logger.Error(e, $"An exception occurred while loading showcase profile \"{name}\".");
+                return null;
+            }
+
+        }
+
+        public IEnumerable<string> ListTournaments()
+        {
+            int validNum = 0;
+            var fileList = GetFiles(string.Empty, "*.json");
+
+            foreach (string file in fileList)
+            {
+                if (file.IsSafeForFilename(50))
+                {
+                    validNum++;
+                    yield return file;
+                }
+            }
+
+            Logger.Log($"Loaded {validNum} valid showcase profiles.");
+        }
+
+        /// <summary>
+        /// Write the showcase config to the file specified in <see cref="ShowcaseConfig.Filename"/>.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">thrown when the config doesn't contain </exception>
+        public void SaveChanges(ShowcaseConfig config)
+        {
+            if (config.Filename.Value == null)
+                throw new InvalidOperationException(@"The config doesn't contain filename information.");
+
+            SaveChangesTo(config, config.Filename.Value);
+        }
+
+        /// <summary>
+        /// Write the showcase config to a specified file.
+        /// </summary>
+        public void SaveChangesTo(ShowcaseConfig config, string filename)
+        {
+            // Update the edit time here for accuracy.
+            config.LastEdited.Value = DateTime.UtcNow;
+
+            // Serialise before opening stream for writing, so if there's a failure it will leave the file in the previous state.
+            string serialisedLadder = GetSerialisedConfig(config);
+
+            if (!filename.IsSafeForFilename(50))
+                throw new ArgumentException($"Cannot use \"{filename}\" as a safe filename.");
+
+            using (var stream = storage.CreateFileSafely(filename))
+            using (var sw = new StreamWriter(stream))
+                sw.Write(serialisedLadder);
+
+            OnProfileChange?.Invoke();
+        }
+
+        public static string GetSerialisedConfig(ShowcaseConfig config)
+            => JsonConvert.SerializeObject(config, new JsonSerializerSettings
+                {
+                    Formatting = Formatting.Indented,
+                    NullValueHandling = NullValueHandling.Ignore,
+                    DefaultValueHandling = DefaultValueHandling.Ignore,
+                    Error = (_, err) =>
+                    {
+                        Logger.Error(null, err.ErrorContext.Error.Message);
+                        err.ErrorContext.Handled = true;
+                    },
+                });
+    }
+}

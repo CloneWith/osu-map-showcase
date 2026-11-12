@@ -1,0 +1,874 @@
+﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh> & CloneWith. Licensed under the MIT Licence.
+// See the LICENCE file in the repository root for full licence text.
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using osu.Framework.Allocation;
+using osu.Framework.Bindables;
+using osu.Framework.Graphics;
+using osu.Framework.Graphics.Colour;
+using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Cursor;
+using osu.Framework.Graphics.Shapes;
+using osu.Framework.Graphics.Sprites;
+using osu.Framework.Graphics.Textures;
+using osu.Framework.Graphics.UserInterface;
+using osu.Framework.Input.Events;
+using osu.Framework.Localisation;
+using osu.Framework.Logging;
+using osu.Framework.Screens;
+using osu.Game.Beatmaps;
+using osu.Game.Beatmaps.Drawables;
+using osu.Game.Beatmaps.Drawables.Cards;
+using osu.Game.Database;
+using osu.Game.Graphics;
+using osu.Game.Graphics.Containers;
+using osu.Game.Graphics.UserInterface;
+using osu.Game.Graphics.UserInterfaceV2;
+using osu.Game.Online;
+using osu.Game.Online.API;
+using osu.Game.Online.API.Requests;
+using osu.Game.Online.Chat;
+using osu.Game.Online.Placeholders;
+using osu.Game.Overlays;
+using osu.Game.Rulesets.Mods;
+using osu.Game.Scoring;
+using osu.Game.Screens.Play.HUD;
+using osu.Game.Screens.Select;
+using osu.Game.Users.Drawables;
+using osuTK;
+using osuTK.Graphics;
+using CommonStrings = osu.Game.Resources.Localisation.Web.CommonStrings;
+
+namespace osu.Game.Rulesets.MapShowcase.Screens
+{
+    public partial class DrawableShowcaseBeatmapItem : OsuRearrangeableListItem<ShowcaseBeatmap>, IHasContextMenu
+    {
+        public const float HEIGHT = 120;
+
+        private const float icon_height = 34;
+
+        /// <summary>
+        /// Invoked when this item requests to be deleted.
+        /// </summary>
+        public Action<ShowcaseBeatmap>? RequestDeletion;
+
+        /// <summary>
+        /// Invoked when this item requests to be edited.
+        /// </summary>
+        public Action<ShowcaseBeatmap>? RequestEdit;
+
+        public ShowcaseBeatmap Item
+        {
+            get => item;
+            set
+            {
+                item = value;
+                beatmapInfo = value.BeatmapInfo;
+                ruleset = rulesetStore.GetRuleset(value.RulesetId) ?? parentConfig.FallbackRuleset.Value;
+                var rulesetInstance = ruleset?.CreateInstance();
+
+                if (rulesetInstance != null)
+                    requiredMods = [.. value.RequiredMods];
+
+                Refresh(needPopulation: true);
+            }
+        }
+
+        public readonly BindableBool ShowEditSection = new BindableBool();
+
+        private readonly DelayedLoadWrapper onScreenLoader = new DelayedLoadWrapper(Empty) { RelativeSizeAxes = Axes.Both };
+
+        private readonly ShowcaseConfig parentConfig;
+
+        private ShowcaseBeatmap item;
+        private WorkingBeatmap? workingBeatmap;
+        private IBeatmapInfo? beatmapInfo;
+        private IRulesetInfo? ruleset;
+        private Mod[] requiredMods = [];
+
+        private FillFlowContainer difficultyIconContainer = null!;
+        private LinkFlowContainer beatmapText = null!;
+        private TextFlowContainer difficultyText = null!;
+        private LinkFlowContainer authorText = null!;
+        private ModDisplay modDisplay = null!;
+        private FillFlowContainer buttonsFlow = null!;
+        private UpdateableAvatar? ownerAvatar;
+        private PanelBackground panelBackground = null!;
+        private FillFlowContainer infoFillFlow = null!;
+        private Sprite modIcon = null!;
+        private Container recordScoreContainer = null!;
+        private LoadingLayer loadingLayer = null!;
+        private FillFlowContainer editFlow = null!;
+
+        [Resolved]
+        private RulesetStore rulesetStore { get; set; } = null!;
+
+        [Resolved]
+        private UserLookupCache userLookupCache { get; set; } = null!;
+
+        [Resolved]
+        private BeatmapManager beatmapManager { get; set; } = null!;
+
+        [Resolved]
+        private BeatmapLookupCache beatmapLookupCache { get; set; } = null!;
+
+        [Resolved]
+        private TextureStore textureStore { get; set; } = null!;
+
+        [Resolved]
+        private BeatmapSetOverlay? beatmapOverlay { get; set; }
+
+        [Resolved]
+        private IPerformFromScreenRunner? performer { get; set; }
+
+        [Resolved]
+        private IAPIProvider api { get; set; } = null!;
+
+        [Resolved]
+        private ScoreManager scoreManager { get; set; } = null!;
+
+        private readonly Bindable<string> selectorId;
+
+        public DrawableShowcaseBeatmapItem(ShowcaseBeatmap item, ShowcaseConfig parentConfig)
+            : base(item)
+        {
+            this.item = item;
+            this.parentConfig = parentConfig;
+
+            selectorId = new Bindable<string>(Item.Selector.Value?.OnlineID.ToString() ?? string.Empty);
+
+            // TODO: Allocation of actions inside ctor seems strange. Is it helpful to change this?
+            RequestEdit = _ =>
+            {
+                var select = new ShowcaseSongSelect(Item);
+                select.OnSelect += updateAsNeeded;
+                Schedule(() => performer?.PerformFromScreen(s => s.Push(select), [
+                    typeof(ShowcaseConfigScreen),
+                ]));
+            };
+            RequestDeletion = _ =>
+            {
+                parentConfig.Beatmaps.Remove(Item);
+                Expire();
+            };
+        }
+
+        private async Task populateInfo()
+        {
+            Schedule(() => loadingLayer.Show());
+
+            try
+            {
+                if (ShowItemOwner)
+                {
+                    var foundUser = await userLookupCache.GetUserAsync(item.Selector.Value.OnlineID).ConfigureAwait(false);
+                    Schedule(() => ownerAvatar!.User = foundUser);
+                }
+
+                workingBeatmap = beatmapManager.GetWorkingBeatmap(new BeatmapInfo { Hash = item.BeatmapHash }, true);
+
+                if (workingBeatmap?.BeatmapInfo.BeatmapSet == null || ReferenceEquals(workingBeatmap, beatmapManager.DefaultBeatmap))
+                {
+                    beatmapInfo = await beatmapLookupCache.GetBeatmapAsync(item.BeatmapId).ConfigureAwait(false);
+                }
+                else
+                {
+                    beatmapInfo = workingBeatmap.BeatmapInfo;
+                }
+
+                ruleset = rulesetStore.GetRuleset(item.RulesetId) ?? parentConfig.FallbackRuleset.Value;
+                requiredMods = [.. item.RequiredMods];
+
+                Scheduler.AddOnce(_ => Refresh(), false);
+            }
+            catch (Exception e)
+            {
+                Logger.Log($"Error while populating showcase item {e}");
+            }
+
+            Schedule(() => loadingLayer.Hide());
+        }
+
+        protected override void LoadComplete()
+        {
+            base.LoadComplete();
+
+            onScreenLoader.DelayedLoadStarted += _ =>
+            {
+                Task.Run(populateInfo);
+            };
+
+            selectorId.BindValueChanged(id =>
+            {
+                bool idValid = int.TryParse(id.NewValue, out int newId) && newId >= 0;
+
+                if (Item.Selector.Value != null)
+                    Item.Selector.Value.OnlineID = idValid ? newId : 0;
+                else
+                {
+                    Item.Selector.Value = new ShowcaseUser
+                    {
+                        OnlineID = idValid ? newId : 0,
+                    };
+                }
+
+                if (idValid)
+                    Scheduler.AddOnce(populateSelector);
+            }, true);
+
+            Item.ModString.BindValueChanged(_ => updateModIcon());
+            Item.ModIndex.BindValueChanged(_ => updateModIcon());
+
+            Item.ShowcaseScore = scoreManager.GetScore(new ScoreInfo
+            {
+                Hash = Item.ScoreHash,
+            })?.ScoreInfo;
+
+            ShowEditSection.BindValueChanged(e => editFlow.FadeTo(e.NewValue ? 1 : 0, 300, Easing.OutQuint));
+        }
+
+        /// <summary>
+        /// Whether this item can be deleted.
+        /// </summary>
+        public bool AllowDeletion { get; init; } = true;
+
+        /// <summary>
+        /// Whether this item can be edited.
+        /// </summary>
+        public bool AllowEditing { get; init; } = true;
+
+        /// <summary>
+        /// Whether details of this item can be viewed and edited.
+        /// </summary>
+        public bool AllowEditingDetails { get; init; } = true;
+
+        /// <summary>
+        /// Whether to display the avatar of the user which selects the map.
+        /// </summary>
+        public bool ShowItemOwner { get; init; } = true;
+
+        public void Refresh(bool refreshScoreOnly = false, bool needPopulation = false)
+        {
+            if (needPopulation)
+            {
+                Task.Run(populateInfo);
+            }
+
+            if (!refreshScoreOnly)
+            {
+                if (beatmapInfo != null)
+                {
+                    difficultyIconContainer.Child = new DifficultyIcon(beatmapInfo, ruleset, requiredMods)
+                    {
+                        Size = new Vector2(32),
+                        TooltipType = DifficultyIconTooltipType.Extended,
+                        Anchor = Anchor.CentreLeft,
+                        Origin = Anchor.CentreLeft,
+                    };
+                }
+                else
+                    difficultyIconContainer.Clear();
+
+                beatmapText.Clear();
+                difficultyText.Clear();
+
+                if (beatmapInfo != null)
+                {
+                    panelBackground.Beatmap.Value = beatmapInfo;
+                    beatmapText.AddLink(beatmapInfo.GetDisplayTitleRomanisable(includeDifficultyName: false, includeCreator: false),
+                        LinkAction.OpenBeatmap,
+                        beatmapInfo.OnlineID.ToString(),
+                        null,
+                        text =>
+                        {
+                            text.Truncate = true;
+                        });
+                    difficultyText.AddText(beatmapInfo.DifficultyName,
+                        text =>
+                        {
+                            text.Truncate = true;
+                        });
+                }
+
+                authorText.Clear();
+
+                if (!string.IsNullOrEmpty(beatmapInfo?.Metadata.Author.Username))
+                {
+                    authorText.AddText("mapped by ");
+                    authorText.AddUserLink(beatmapInfo.Metadata.Author);
+                }
+
+                modDisplay.Current.Value = [.. requiredMods];
+            }
+
+            recordScoreContainer.Clear();
+
+            recordScoreContainer.Child = item.ShowcaseScore != null
+                ? new BeatmapLeaderboardScore(item.ShowcaseScore)
+                : new MessagePlaceholder(MapShowcaseStrings.NoScoreAssociationPrompt);
+
+            modIcon.Texture = textureStore.Get($"{parentConfig.TournamentName}/{item.ModString}{item.ModIndex}");
+
+            buttonsFlow.Clear();
+            buttonsFlow.ChildrenEnumerable = createButtons();
+
+            modIcon.FadeInFromZero(500, Easing.OutQuint);
+            difficultyIconContainer.FadeInFromZero(500, Easing.OutQuint);
+            infoFillFlow.FadeInFromZero(500, Easing.OutQuint);
+            recordScoreContainer.FadeInFromZero(500, Easing.OutQuint);
+        }
+
+        protected override Drawable CreateContent()
+        {
+            Action<SpriteText> fontParameters = s => s.Font = OsuFont.Default.With(size: 14, weight: FontWeight.SemiBold);
+
+            return new FillFlowContainer
+            {
+                RelativeSizeAxes = Axes.X,
+                AutoSizeAxes = Axes.Y,
+                Direction = FillDirection.Vertical,
+                Spacing = new Vector2(5),
+                AutoSizeDuration = 300,
+                AutoSizeEasing = Easing.OutQuint,
+                Children =
+                [
+                    new Container
+                    {
+                        Name = @"Main card",
+                        RelativeSizeAxes = Axes.X,
+                        Height = HEIGHT,
+                        Masking = true,
+                        CornerRadius = 10,
+                        Children =
+                        [
+                            onScreenLoader,
+                            panelBackground = new PanelBackground
+                            {
+                                RelativeSizeAxes = Axes.Both,
+                            },
+                            new GridContainer
+                            {
+                                RelativeSizeAxes = Axes.Both,
+                                Height = 0.5f,
+                                ColumnDimensions =
+                                [
+                                    new Dimension(GridSizeMode.AutoSize),
+                                    new Dimension(),
+                                    new Dimension(GridSizeMode.Relative, 0.1f),
+                                    new Dimension(GridSizeMode.AutoSize),
+                                    new Dimension(GridSizeMode.AutoSize),
+                                ],
+                                Content = new[]
+                                {
+                                    new Drawable[]
+                                    {
+                                        difficultyIconContainer = new FillFlowContainer
+                                        {
+                                            Anchor = Anchor.CentreLeft,
+                                            Origin = Anchor.CentreLeft,
+                                            AutoSizeAxes = Axes.X,
+                                            RelativeSizeAxes = Axes.Y,
+                                            Direction = FillDirection.Horizontal,
+                                            Spacing = new Vector2(4),
+                                            Margin = new MarginPadding
+                                            {
+                                                Horizontal = 8,
+                                            },
+                                        },
+                                        infoFillFlow = new FillFlowContainer
+                                        {
+                                            Anchor = Anchor.CentreLeft,
+                                            Origin = Anchor.CentreLeft,
+                                            AutoSizeAxes = Axes.Y,
+                                            RelativeSizeAxes = Axes.X,
+                                            Direction = FillDirection.Vertical,
+                                            Spacing = new Vector2(0, -2),
+                                            Children =
+                                            [
+                                                beatmapText = new LinkFlowContainer(fontParameters)
+                                                {
+                                                    RelativeSizeAxes = Axes.X,
+                                                    // workaround to ensure only the first line of text shows, emulating truncation (but without ellipsis at the end).
+                                                    // TODO: remove when text/link flow can support truncation with ellipsis natively.
+                                                    Height = OsuFont.DEFAULT_FONT_SIZE,
+                                                    Masking = true,
+                                                },
+                                                difficultyText = new TextFlowContainer(fontParameters)
+                                                {
+                                                    RelativeSizeAxes = Axes.X,
+                                                    Height = OsuFont.DEFAULT_FONT_SIZE,
+                                                    Masking = true,
+                                                },
+                                                new FillFlowContainer
+                                                {
+                                                    AutoSizeAxes = Axes.Both,
+                                                    Direction = FillDirection.Horizontal,
+                                                    Spacing = new Vector2(10f, 0),
+                                                    Children =
+                                                    [
+                                                        authorText = new LinkFlowContainer(fontParameters)
+                                                        {
+                                                            AutoSizeAxes = Axes.Both,
+                                                        },
+                                                        new Container
+                                                        {
+                                                            Anchor = Anchor.CentreLeft,
+                                                            Origin = Anchor.CentreLeft,
+                                                            AutoSizeAxes = Axes.Both,
+                                                            Child = modDisplay = new ModDisplay
+                                                            {
+                                                                Scale = new Vector2(0.4f),
+                                                                ExpansionMode = ExpansionMode.AlwaysExpanded,
+                                                                Margin = new MarginPadding
+                                                                {
+                                                                    Vertical = -6,
+                                                                },
+                                                            },
+                                                        },
+                                                    ],
+                                                },
+                                            ],
+                                        },
+                                        modIcon = new Sprite
+                                        {
+                                            Anchor = Anchor.Centre,
+                                            Origin = Anchor.Centre,
+                                            RelativeSizeAxes = Axes.Both,
+                                            FillMode = FillMode.Fit,
+                                            Margin = new MarginPadding
+                                            {
+                                                Horizontal = 4,
+                                            },
+                                        },
+                                        buttonsFlow = new FillFlowContainer
+                                        {
+                                            Anchor = Anchor.CentreRight,
+                                            Origin = Anchor.CentreRight,
+                                            Direction = FillDirection.Horizontal,
+                                            Margin = new MarginPadding
+                                            {
+                                                Horizontal = 8,
+                                            },
+                                            AutoSizeAxes = Axes.Both,
+                                            Spacing = new Vector2(5),
+                                            ChildrenEnumerable = createButtons().Select(button => button.With(b =>
+                                            {
+                                                b.Anchor = Anchor.Centre;
+                                                b.Origin = Anchor.Centre;
+                                            })),
+                                        },
+                                        ownerAvatar = new OwnerAvatar
+                                        {
+                                            Anchor = Anchor.Centre,
+                                            Origin = Anchor.Centre,
+                                            Size = new Vector2(icon_height),
+                                            Margin = new MarginPadding
+                                            {
+                                                Right = 8,
+                                            },
+                                            Masking = true,
+                                            CornerRadius = 4,
+                                            Alpha = ShowItemOwner ? 1 : 0,
+                                        },
+                                    },
+                                },
+                            },
+                            recordScoreContainer = new Container
+                            {
+                                Anchor = Anchor.BottomCentre,
+                                Origin = Anchor.BottomCentre,
+                                RelativeSizeAxes = Axes.X,
+                                AutoSizeAxes = Axes.Y,
+                                Child = item.ShowcaseScore != null
+                                    ? new BeatmapLeaderboardScore(item.ShowcaseScore, false)
+                                    : new MessagePlaceholder(MapShowcaseStrings.NoScoreAssociationPrompt),
+                            },
+                            loadingLayer = new LoadingLayer(true),
+                        ],
+                    },
+                    editFlow = new FillFlowContainer
+                    {
+                        Name = @"Editor",
+                        Alpha = ShowEditSection.Value ? 1 : 0,
+                        RelativeSizeAxes = Axes.X,
+                        AutoSizeAxes = Axes.Y,
+                        Spacing = new Vector2(5),
+                        Padding = new MarginPadding(10),
+                        Direction = FillDirection.Full,
+                        Children =
+                        [
+                            new GridContainer
+                            {
+                                RelativeSizeAxes = Axes.X,
+                                AutoSizeAxes = Axes.Y,
+                                RowDimensions =
+                                [
+                                    new Dimension(GridSizeMode.AutoSize),
+                                    new Dimension(GridSizeMode.Absolute, 5),
+                                    new Dimension(GridSizeMode.AutoSize),
+                                    new Dimension(GridSizeMode.Absolute, 5),
+                                    new Dimension(GridSizeMode.AutoSize),
+                                ],
+                                ColumnDimensions =
+                                [
+                                    new Dimension(),
+                                    new Dimension(GridSizeMode.Absolute, 10),
+                                    new Dimension(),
+                                ],
+                                Content = new[]
+                                {
+                                    new[]
+                                    {
+                                        new FormCheckBox
+                                        {
+                                            Caption = MapShowcaseStrings.TournamentOriginal,
+                                            HintText = MapShowcaseStrings.TournamentOriginalDescription,
+                                            Current = Item.IsOriginal,
+                                        },
+                                        Empty(),
+                                        new FormNumberBox
+                                        {
+                                            Caption = MapShowcaseStrings.BeatmapChooserID,
+                                            HintText = MapShowcaseStrings.BeatmapChooserIDDescription,
+                                            Current = selectorId,
+                                        },
+                                    },
+                                    new[]
+                                    {
+                                        Empty(),
+                                    },
+                                    new[]
+                                    {
+                                        new FormTextBox
+                                        {
+                                            Caption = MapShowcaseStrings.BeatmapModType,
+                                            HintText = MapShowcaseStrings.BeatmapModTypeDescription,
+                                            Current = Item.ModString,
+                                        },
+                                        Empty(),
+                                        new FormTextBox
+                                        {
+                                            Caption = MapShowcaseStrings.BeatmapModIndex,
+                                            HintText = MapShowcaseStrings.BeatmapModIndexDescription,
+                                            Current = Item.ModIndex,
+                                        },
+                                    },
+                                    new[]
+                                    {
+                                        Empty(),
+                                    },
+                                    new[]
+                                    {
+                                        new FormTextBox
+                                        {
+                                            Caption = MapShowcaseStrings.DifficultyField,
+                                            HintText = MapShowcaseStrings.DifficultyFieldDescription,
+                                            Current = Item.DiffField,
+                                        },
+                                        Empty(),
+                                        new FormTextBox
+                                        {
+                                            Caption = MapShowcaseStrings.CreditUsers,
+                                            HintText = MapShowcaseStrings.CreditUsersDescription,
+                                            Current = Item.CreditUserIds,
+                                        },
+                                    },
+                                },
+                            },
+                            new FormTextBox
+                            {
+                                Caption = MapShowcaseStrings.Comment,
+                                HintText = MapShowcaseStrings.BeatmapCommentDescription,
+                                Current = Item.BeatmapComment,
+                            },
+                        ],
+                    },
+                ],
+            };
+        }
+
+        private Drawable[] createButtons() =>
+        [
+            beatmapInfo?.BeatmapSet == null ? Empty() : new PlaylistDownloadButton(beatmapInfo),
+            new ItemDetailsButton
+            {
+                Size = new Vector2(30, 30),
+                Alpha = AllowEditingDetails ? 1 : 0,
+                Action = () => ShowEditSection.Value = !ShowEditSection.Value,
+                Expanded = { BindTarget = ShowEditSection },
+            },
+            new PlaylistEditButton
+            {
+                Size = new Vector2(30, 30),
+                Alpha = AllowEditing ? 1 : 0,
+                Action = () => RequestEdit?.Invoke(item),
+                TooltipText = CommonStrings.ButtonsEdit,
+            },
+            new PlaylistRemoveButton
+            {
+                Size = new Vector2(30, 30),
+                Alpha = AllowDeletion ? 1 : 0,
+                Action = () => RequestDeletion?.Invoke(item),
+                TooltipText = MapShowcaseStrings.RemoveBeatmap,
+            },
+        ];
+
+        private void updateModIcon()
+        {
+            modIcon.Texture = textureStore.Get($"{parentConfig.TournamentName}/{item.ModString}{item.ModIndex}");
+            modIcon.FadeInFromZero(500, Easing.OutQuint);
+        }
+
+        protected override bool OnHover(HoverEvent e)
+        {
+            panelBackground.FadeColour(OsuColour.Gray(0.7f), BeatmapCard.TRANSITION_DURATION, Easing.OutQuint);
+            return base.OnHover(e);
+        }
+
+        protected override void OnHoverLost(HoverLostEvent e)
+        {
+            panelBackground.FadeColour(OsuColour.Gray(1f), BeatmapCard.TRANSITION_DURATION, Easing.OutQuint);
+            base.OnHoverLost(e);
+        }
+
+        public MenuItem[] ContextMenuItems
+        {
+            get
+            {
+                List<MenuItem> items = [];
+
+                if (beatmapOverlay != null)
+                    items.Add(new OsuMenuItem(MapShowcaseStrings.ShowBeatmapDetails, MenuItemType.Standard, () => beatmapOverlay.FetchAndShowBeatmap(item.BeatmapId)));
+
+                if (item.ShowcaseScore != null)
+                {
+                    items.Add(new OsuMenuItem(MapShowcaseStrings.RemoveReplayScore, MenuItemType.Highlighted, () =>
+                    {
+                        item.ShowcaseScore = null;
+                        item.ScoreHash = string.Empty;
+                        recordScoreContainer.Child = new MessagePlaceholder(MapShowcaseStrings.NoScoreAssociationPrompt);
+                    }));
+                }
+
+                return [.. items];
+            }
+        }
+
+        private void updateAsNeeded(SelectResult result, BeatmapInfo info, RulesetInfo rulesetInfo, ScoreInfo? score, IReadOnlyList<Mod> mods)
+        {
+            if (result.HasFlag(SelectResult.RulesetUpdated))
+            {
+                Item.RulesetId = rulesetInfo.OnlineID;
+            }
+
+            if (result.HasFlag(SelectResult.ScoreUpdated))
+            {
+                Item.ShowcaseScore = score;
+                Item.ScoreHash = Item.ShowcaseScore?.Hash ?? string.Empty;
+            }
+
+            if (result.HasFlag(SelectResult.BeatmapUpdated))
+            {
+                Item.BeatmapInfo = info;
+                Item.BeatmapId = info.OnlineID;
+                Item.BeatmapHash = info.Hash;
+
+                // This triggers a full refresh, thus no further action is needed.
+                Refresh(needPopulation: true);
+                return;
+            }
+
+            if (result.HasFlag(SelectResult.ModUpdated))
+            {
+                Item.RequiredMods.Clear();
+                Item.RequiredMods.AddRange(mods);
+            }
+
+            // For other uncovered cases, e.g. ruleset and score updates.
+            Refresh(refreshScoreOnly: result == SelectResult.ScoreUpdated,
+                needPopulation: result.HasFlag(SelectResult.RulesetUpdated));
+        }
+
+        private void populateSelector()
+        {
+            Task.Run(async () =>
+            {
+                var req = new GetUserRequest(Item.Selector.Value.OnlineID);
+
+                await api.PerformAsync(req).ConfigureAwait(true);
+
+                var res = req.Response;
+
+                Item.Selector.Value.OnlineID = res?.Id ?? 0;
+
+                Item.Selector.Value.Username = res?.Username ?? string.Empty;
+                Item.Selector.Value.Rank = res?.Statistics?.GlobalRank;
+
+                Scheduler.AddOnce(_ => Refresh(needPopulation: true), false);
+            });
+        }
+
+        public partial class ItemDetailsButton() : GrayButton(FontAwesome.Solid.InfoCircle)
+        {
+            public BindableBool Expanded { get; } = new BindableBool();
+
+            [Resolved]
+            private OsuColour colours { get; set; } = null!;
+
+            protected override void LoadComplete()
+            {
+                base.LoadComplete();
+
+                Expanded.BindValueChanged(e =>
+                {
+                    Background.FadeColour(e.NewValue ? colours.Blue1 : colours.Gray4, 300, Easing.OutQuint);
+                });
+            }
+        }
+
+        public partial class PlaylistEditButton() : GrayButton(FontAwesome.Solid.Edit);
+
+        public partial class PlaylistRemoveButton() : GrayButton(FontAwesome.Solid.MinusSquare);
+
+        private sealed partial class PlaylistDownloadButton : BeatmapDownloadButton
+        {
+            private readonly IBeatmapInfo beatmap;
+
+            [Resolved]
+            private BeatmapManager beatmapManager { get; set; } = null!;
+
+            // required for download tracking, as this button hides itself. can probably be removed with a bit of consideration.
+            public override bool IsPresent => true;
+
+            private const float width = 50;
+
+            public PlaylistDownloadButton(IBeatmapInfo beatmap)
+                : base(beatmap.BeatmapSet)
+            {
+                this.beatmap = beatmap;
+
+                Size = new Vector2(width, 30);
+                Alpha = 0;
+            }
+
+            protected override void LoadComplete()
+            {
+                State.BindValueChanged(stateChanged, true);
+
+                // base implementation calls FinishTransforms, so should be run after the above state update.
+                base.LoadComplete();
+            }
+
+            private void stateChanged(ValueChangedEvent<DownloadState> state)
+            {
+                switch (state.NewValue)
+                {
+                    case DownloadState.Unknown:
+                        // Ignore initial state to ensure the button doesn't briefly appear.
+                        break;
+
+                    case DownloadState.LocallyAvailable:
+                        // Perform a local query of the beatmap by beatmap checksum, and reset the state if not matching.
+                        if (beatmapManager.QueryBeatmap(b => b.MD5Hash == beatmap.MD5Hash) == null)
+                            State.Value = DownloadState.NotDownloaded;
+                        else
+                        {
+                            this.FadeTo(0, 500)
+                                .ResizeWidthTo(0, 500, Easing.OutQuint);
+                        }
+
+                        break;
+
+                    default:
+                        this.ResizeWidthTo(width, 500, Easing.OutQuint)
+                            .FadeTo(1, 500);
+                        break;
+                }
+            }
+        }
+
+        // For now, this is the same implementation as in PanelBackground, but supports a beatmap info rather than a working beatmap
+        private partial class PanelBackground : Container // todo: should be a buffered container (https://github.com/ppy/osu-framework/issues/3222)
+        {
+            public readonly Bindable<IBeatmapInfo> Beatmap = new Bindable<IBeatmapInfo>();
+
+            public PanelBackground()
+            {
+                UpdateableBeatmapBackgroundSprite backgroundSprite;
+
+                InternalChildren =
+                [
+                    backgroundSprite = new UpdateableBeatmapBackgroundSprite
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                    },
+                    new FillFlowContainer
+                    {
+                        Depth = -1,
+                        RelativeSizeAxes = Axes.Both,
+                        Direction = FillDirection.Horizontal,
+                        // This makes the gradient not be perfectly horizontal, but diagonal at a ~40° angle
+                        Shear = new Vector2(0.8f, 0),
+                        Alpha = 0.6f,
+                        Children =
+                        [
+                            // The left half with no gradient applied
+                            new Box
+                            {
+                                RelativeSizeAxes = Axes.Both,
+                                Colour = Color4.Black,
+                                Width = 0.4f,
+                            },
+                            // Piecewise-linear gradient with 2 segments to make it appear smoother
+                            new Box
+                            {
+                                RelativeSizeAxes = Axes.Both,
+                                Colour = ColourInfo.GradientHorizontal(Color4.Black, new Color4(0f, 0f, 0f, 0.7f)),
+                                Width = 0.4f,
+                            },
+                            new Box
+                            {
+                                RelativeSizeAxes = Axes.Both,
+                                Colour = ColourInfo.GradientHorizontal(new Color4(0f, 0f, 0f, 0.7f), new Color4(0, 0, 0, 0.4f)),
+                                Width = 0.4f,
+                            },
+                        ],
+                    },
+                ];
+
+                // manual binding required as playlists don't expose IBeatmapInfo currently.
+                // may be removed in the future if this changes.
+                Beatmap.BindValueChanged(beatmap => backgroundSprite.Beatmap.Value = beatmap.NewValue);
+            }
+        }
+
+        private partial class OwnerAvatar : UpdateableAvatar, IHasTooltip
+        {
+            public OwnerAvatar()
+            {
+                AddInternal(new TooltipArea(this)
+                {
+                    RelativeSizeAxes = Axes.Both,
+                    Depth = -1,
+                });
+            }
+
+            public LocalisableString TooltipText => User == null ? string.Empty : $"selected by {User.Username}";
+
+            private partial class TooltipArea : Component, IHasTooltip
+            {
+                private readonly OwnerAvatar avatar;
+
+                public TooltipArea(OwnerAvatar avatar)
+                {
+                    this.avatar = avatar;
+                }
+
+                public LocalisableString TooltipText => avatar.TooltipText;
+            }
+        }
+    }
+}

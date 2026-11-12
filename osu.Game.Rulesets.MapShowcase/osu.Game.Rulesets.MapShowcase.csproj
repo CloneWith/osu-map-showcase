@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup Label="Project">
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyTitle>osu.Game.Rulesets.MapShowcase</AssemblyTitle>
+    <OutputType>Library</OutputType>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <RootNamespace>osu.Game.Rulesets.MapShowcase</RootNamespace>
+    <Nullable>enable</Nullable>
+    <LangVersion>14.0</LangVersion>
+  </PropertyGroup>
+  <ItemGroup Label="Resources">
+    <EmbeddedResource Include="Resources\**\*.*" Exclude="Resources\**\*.cs;Resources\**\*.resx" />
+  </ItemGroup>
+  <ItemGroup Label="Package References">
+    <PackageReference Include="ppy.osu.Game" Version="2026.1026.0" />
+  </ItemGroup>
+</Project>

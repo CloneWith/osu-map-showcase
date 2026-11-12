@@ -1,0 +1,422 @@
+﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh> & CloneWith. Licensed under the MIT Licence.
+// See the LICENCE file in the repository root for full licence text.
+
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Threading.Tasks;
+using osu.Framework.Allocation;
+using osu.Framework.Bindables;
+using osu.Framework.Extensions;
+using osu.Framework.Extensions.LocalisationExtensions;
+using osu.Framework.Graphics;
+using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Cursor;
+using osu.Framework.Graphics.Shapes;
+using osu.Framework.Graphics.Sprites;
+using osu.Framework.Graphics.UserInterface;
+using osu.Framework.Input.Bindings;
+using osu.Framework.Input.Events;
+using osu.Framework.Localisation;
+using osu.Framework.Logging;
+using osu.Game.Graphics;
+using osu.Game.Graphics.Containers;
+using osu.Game.Graphics.UserInterface;
+using osu.Game.Graphics.UserInterfaceV2;
+using osu.Game.Input.Bindings;
+using osu.Game.Localisation;
+using osu.Game.Overlays;
+using osuTK;
+
+namespace osu.Game.Rulesets.MapShowcase.Screens
+{
+    public partial class ShowcaseProfileItem(ShowcaseConfig config) : CompositeDrawable, IHasContextMenu, IFilterable, IHasPopover, IKeyBindingHandler<GlobalAction>,
+        IKeyBindingHandler<MapShowcaseAction>
+    {
+        protected const float CORNER_RADIUS = 10;
+        private const float height = 80;
+        private const float indicator_height_active = 18;
+        private const float indicator_height_inactive = 4;
+
+        public ShowcaseConfig Config { get; } = config;
+
+        public required Bindable<ShowcaseConfig?> SelectedConfig
+        {
+            get => selectedConfig;
+            set => selectedConfig.Current = value;
+        }
+
+        private readonly BindableWithCurrent<ShowcaseConfig?> selectedConfig = new BindableWithCurrent<ShowcaseConfig?>();
+
+        public BindableBool Focused { get; } = new BindableBool();
+
+        public IEnumerable<LocalisableString> FilterTerms
+            => [Config.Filename.Value, Config.TournamentName.Value, Config.RoundName.Value];
+
+        private bool matchingFilter = true;
+
+        public bool MatchingFilter
+        {
+            get => matchingFilter;
+            set
+            {
+                matchingFilter = value;
+
+                if (matchingFilter)
+                    this.FadeIn(200);
+                else
+                    Hide();
+            }
+        }
+
+        // Dependency of IFilterable
+        // ReSharper disable once UnusedAutoPropertyAccessor.Global
+        public bool FilteringActive { get; set; }
+
+        public Popover GetPopover() => new CloneRenamePopover(Config);
+
+        [Cached]
+        private readonly OverlayColourProvider colourProvider = new OverlayColourProvider(config.ColourScheme.Value);
+
+        [Resolved]
+        private OsuScreenStack? screenStack { get; set; }
+
+        private FormControlBackground background = null!;
+        private CircularContainer selectionIndicator = null!;
+        private Container iconContainer = null!;
+        private MarqueeContainer titleContainer = null!;
+        private OsuTextFlowContainer detailsFlow = null!;
+
+        private Action requestLaunch = null!;
+        private Action requestEdit = null!;
+        private Action requestCloneOrRename => this.ShowPopover;
+        private Action requestDelete = null!;
+
+        [BackgroundDependencyLoader]
+        private void load(IRulesetStore rulesetStore, IDialogOverlay dialogOverlay, ShowcaseStorage storage)
+        {
+            requestLaunch = () => screenStack?.Push(new ShowcaseViewScreen(Config));
+            requestEdit = () => screenStack?.Push(new ShowcaseConfigScreen(Config));
+
+            // WrappedStorage doesn't have a delete method. Using System.IO here instead.
+            requestDelete = () => dialogOverlay.Push(new ProfileDeleteConfirmationDialog(() =>
+            {
+                if (!storage.Exists(Config.Filename.Value))
+                    return;
+
+                string path = storage.GetFullPath(Config.Filename.Value);
+
+                Task.Run(() =>
+                {
+                    try
+                    {
+                        File.Delete(path);
+                    }
+                    catch (Exception e)
+                    {
+                        Logger.Error(e, @"An error occurred while deleting profile.");
+                    }
+                }).ContinueWith(_ => storage.TriggerProfileChange());
+            }));
+
+            Masking = true;
+            CornerRadius = CORNER_RADIUS;
+            RelativeSizeAxes = Axes.X;
+            Height = height;
+
+            InternalChildren =
+            [
+                background = new ControlBackground(),
+                new GridContainer
+                {
+                    RelativeSizeAxes = Axes.Both,
+                    Padding = new MarginPadding { Horizontal = 15 },
+                    ColumnDimensions =
+                    [
+                        new Dimension(GridSizeMode.AutoSize),
+                        new Dimension(GridSizeMode.AutoSize),
+                        new Dimension(),
+                        new Dimension(GridSizeMode.AutoSize),
+                    ],
+                    Content = new[]
+                    {
+                        new Drawable[]
+                        {
+                            selectionIndicator = new CircularContainer
+                            {
+                                Width = 4,
+                                Height = indicator_height_inactive,
+                                Masking = true,
+                                CornerRadius = 1.5f,
+                                Colour = colourProvider.Highlight1,
+                                Anchor = Anchor.CentreLeft,
+                                Origin = Anchor.CentreLeft,
+                                Margin = new MarginPadding { Right = 10 },
+                                Child = new Box
+                                {
+                                    RelativeSizeAxes = Axes.Both,
+                                    Colour = Colour4.White,
+                                },
+                            },
+                            iconContainer = new Container
+                            {
+                                Anchor = Anchor.CentreLeft,
+                                Origin = Anchor.CentreLeft,
+                                AutoSizeAxes = Axes.Both,
+                                Margin = new MarginPadding { Right = 15 },
+                            },
+                            new FillFlowContainer
+                            {
+                                Anchor = Anchor.CentreLeft,
+                                Origin = Anchor.CentreLeft,
+                                RelativeSizeAxes = Axes.X,
+                                AutoSizeAxes = Axes.Y,
+                                Direction = FillDirection.Vertical,
+                                Spacing = new Vector2(2),
+                                Margin = new MarginPadding { Vertical = 2 },
+                                Masking = true,
+                                Children =
+                                [
+                                    titleContainer = new MarqueeContainer
+                                    {
+                                        Name = @"Profile Name",
+                                        Anchor = Anchor.CentreLeft,
+                                        Origin = Anchor.CentreLeft,
+                                        NonOverflowingContentAnchor = Anchor.CentreLeft,
+                                    },
+                                    detailsFlow = new OsuTextFlowContainer(t =>
+                                    {
+                                        t.Font = OsuFont.Style.Body.With(size: 18);
+                                        t.Margin = new MarginPadding { Right = 5 };
+                                    })
+                                    {
+                                        Name = @"Details",
+                                        Anchor = Anchor.CentreLeft,
+                                        Origin = Anchor.CentreLeft,
+                                        TextAnchor = Anchor.CentreLeft,
+                                        AutoSizeAxes = Axes.Both,
+                                    },
+                                ],
+                            },
+                            new FillFlowContainer
+                            {
+                                Anchor = Anchor.CentreRight,
+                                Origin = Anchor.CentreRight,
+                                RelativeSizeAxes = Axes.Y,
+                                AutoSizeAxes = Axes.X,
+                                Direction = FillDirection.Horizontal,
+                                Spacing = new Vector2(3),
+                                Children =
+                                [
+                                    new IconButton
+                                    {
+                                        Anchor = Anchor.Centre,
+                                        Origin = Anchor.Centre,
+                                        Size = new Vector2(36),
+                                        Icon = FontAwesome.Solid.Play,
+                                        Action = requestLaunch,
+                                        TooltipText = MapShowcaseStrings.StartShowcase,
+                                    },
+                                    new IconButton
+                                    {
+                                        Anchor = Anchor.Centre,
+                                        Origin = Anchor.Centre,
+                                        Size = new Vector2(36),
+                                        Icon = FontAwesome.Solid.Copy,
+                                        Action = requestCloneOrRename,
+                                        TooltipText = MapShowcaseStrings.CloneOrRename,
+                                    },
+                                    new IconButton
+                                    {
+                                        Anchor = Anchor.Centre,
+                                        Origin = Anchor.Centre,
+                                        Size = new Vector2(36),
+                                        Icon = FontAwesome.Solid.Trash,
+                                        Action = requestDelete,
+                                        TooltipText = BaseStrings.Remove,
+                                    },
+                                ],
+                            },
+                        },
+                    },
+                },
+            ];
+
+            var ruleset = rulesetStore.GetRuleset(Config.FallbackRuleset.Value.ShortName)?.CreateInstance();
+
+            var icon = ruleset?.CreateIcon();
+
+            iconContainer.Child = icon?.With(i => i.Size = new Vector2(24))
+                                  ?? new SpriteIcon
+                                  {
+                                      Size = new Vector2(24),
+                                      Icon = FontAwesome.Regular.Circle,
+                                  };
+
+            var creationParameters = (SpriteText i) =>
+            {
+                i.Size = new Vector2(20);
+                i.Margin = new MarginPadding { Right = 5 };
+            };
+
+            titleContainer.CreateContent = () =>
+            {
+                var titleFlow = new OsuTextFlowContainer(t => t.Font = OsuFont.Style.Title)
+                {
+                    Name = @"Profile Name",
+                    Anchor = Anchor.CentreLeft,
+                    Origin = Anchor.CentreLeft,
+                    TextAnchor = Anchor.CentreLeft,
+                    AutoSizeAxes = Axes.Both,
+                };
+
+                titleFlow.AddText(Config.TournamentName.Value, t => t.Colour = colourProvider.Highlight1);
+                titleFlow.AddText(@$" [{Config.RoundName.Value}] ");
+                titleFlow.AddText($@"({Config.Filename.Value})", t => t.Font = OsuFont.Style.Caption1);
+
+                return titleFlow;
+            };
+
+            detailsFlow.AddIcon(FontAwesome.Solid.Music, creationParameters);
+            detailsFlow.AddText($"{Config.Beatmaps.Count}");
+
+            if (Config.LastEdited.Value != null)
+            {
+                detailsFlow.AddIcon(FontAwesome.Solid.PencilAlt, creationParameters);
+                detailsFlow.AddArbitraryDrawable(new DrawableDate(Config.LastEdited.Value.Value, 18f, false));
+            }
+
+            if (Config.LastPlayed.Value != null)
+            {
+                detailsFlow.AddIcon(FontAwesome.Solid.Play);
+                detailsFlow.AddArbitraryDrawable(new DrawableDate(Config.LastPlayed.Value.Value, 18f, false));
+            }
+        }
+
+        protected override void LoadComplete()
+        {
+            base.LoadComplete();
+
+            Alpha = matchingFilter ? 1 : 0;
+            selectedConfig.BindValueChanged(c =>
+            {
+                Focused.Value = c.NewValue == Config;
+                updateState();
+            }, true);
+        }
+
+        public bool OnPressed(KeyBindingPressEvent<GlobalAction> e)
+        {
+            if (e.Repeat)
+                return false;
+
+            if (selectedConfig.Value != Config)
+                return false;
+
+            switch (e.Action)
+            {
+                case GlobalAction.Select:
+                    requestEdit.Invoke();
+                    return true;
+            }
+
+            return false;
+        }
+
+        public void OnReleased(KeyBindingReleaseEvent<GlobalAction> e)
+        {
+        }
+
+        public bool OnPressed(KeyBindingPressEvent<MapShowcaseAction> e)
+        {
+            if (e.Repeat)
+                return false;
+
+            if (selectedConfig.Value != Config)
+                return false;
+
+            switch (e.Action)
+            {
+                case MapShowcaseAction.StartShowcase:
+                    requestLaunch.Invoke();
+                    return true;
+            }
+
+            return false;
+        }
+
+        public void OnReleased(KeyBindingReleaseEvent<MapShowcaseAction> e)
+        {
+        }
+
+        protected override bool OnClick(ClickEvent e)
+        {
+            Focused.Value = true;
+            SelectedConfig.Value = Config;
+            background.FlashOnCommit();
+            updateState();
+            return true;
+        }
+
+        protected override bool OnDoubleClick(DoubleClickEvent e)
+        {
+            requestEdit.Invoke();
+            return true;
+        }
+
+        protected override bool OnHover(HoverEvent e)
+        {
+            updateState();
+            return base.OnHover(e);
+        }
+
+        protected override void OnHoverLost(HoverLostEvent e)
+        {
+            updateState();
+            base.OnHoverLost(e);
+        }
+
+        protected override void OnFocus(FocusEvent e)
+        {
+            updateState();
+            Focused.Value = true;
+            base.OnFocus(e);
+        }
+
+        protected override void OnFocusLost(FocusLostEvent e)
+        {
+            updateState();
+            Focused.Value = false;
+            base.OnFocusLost(e);
+        }
+
+        private void updateState()
+        {
+            selectionIndicator.ResizeHeightTo(Focused.Value || IsHovered ? indicator_height_active : indicator_height_inactive, 500, Easing.OutQuint);
+
+            if (Focused.Value)
+                background.VisualStyle = VisualStyle.Focused;
+            else if (IsHovered)
+                background.VisualStyle = VisualStyle.Hovered;
+            else
+                background.VisualStyle = VisualStyle.Normal;
+        }
+
+        public MenuItem[] ContextMenuItems =>
+        [
+            new OsuMenuItem(MapShowcaseStrings.StartShowcase, MenuItemType.Highlighted, requestLaunch),
+            new OsuMenuItem(ButtonSystemStrings.Edit.ToSentence(), MenuItemType.Standard, requestEdit),
+            new OsuMenuItemSpacer(),
+            new OsuMenuItem(MapShowcaseStrings.CloneOrRename, MenuItemType.Standard, requestCloneOrRename),
+            new OsuMenuItem(BaseStrings.Remove, MenuItemType.Destructive, requestDelete),
+        ];
+
+        private partial class ControlBackground : FormControlBackground
+        {
+            public ControlBackground()
+            {
+                CornerRadius = CORNER_RADIUS;
+            }
+        }
+    }
+}

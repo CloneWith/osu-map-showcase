@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="osu.Game.Rulesets.MapShowcase.Tests/osu.Game.Rulesets.MapShowcase.Tests.csproj" />
+  <Project Path="osu.Game.Rulesets.MapShowcase/osu.Game.Rulesets.MapShowcase.csproj" />
+</Solution>
