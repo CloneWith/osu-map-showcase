@@ -19,6 +19,7 @@ using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Overlays;
 using osu.Game.Rulesets.MapShowcase.Graphics;
+using osu.Game.Rulesets.MapShowcase.Utils;
 using osuTK;
 using osuTK.Graphics;
 
@@ -217,9 +218,9 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
             {
                 try
                 {
-                    workingBeatmap = beatmapManager.GetWorkingBeatmap(new BeatmapInfo { Hash = beatmap.BeatmapHash }, true);
+                    workingBeatmap = beatmap.GetLocalWorkingBeatmap(beatmapManager);
 
-                    if (ReferenceEquals(workingBeatmap, beatmapManager.DefaultBeatmap))
+                    if (workingBeatmap == null)
                     {
                         beatmapInfo = await beatmapLookupCache.GetBeatmapAsync(beatmap.BeatmapId).ConfigureAwait(false);
                     }
@@ -230,7 +231,7 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
 
                     if (beatmapInfo != null)
                     {
-                        setCover.Texture = workingBeatmap.GetBackground();
+                        setCover.Texture = workingBeatmap?.GetBackground();
 
                         var diff = await difficultyCache.GetDifficultyAsync(beatmapInfo).ConfigureAwait(false);
                         starRatingDisplay.Current.Value = diff ?? new StarDifficulty();

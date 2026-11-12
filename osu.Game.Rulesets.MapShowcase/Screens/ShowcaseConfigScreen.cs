@@ -467,17 +467,35 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
 
         private bool checkAndFetchScores()
         {
-            if (currentProfile.Value.Beatmaps.All(b => b.ShowcaseScore != null))
-                return true;
+            // Re-resolve every entry against the local database.
+            currentProfile.Value.Beatmaps.ForEach(ensureScoreResolved);
 
-            // Try fetching missing scores once
-            currentProfile.Value.Beatmaps.Where(b => b.ShowcaseScore == null)
-                          .ForEach(b => b.ShowcaseScore = scoreManager.GetScore(new ScoreInfo
-                          {
-                              Hash = b.ScoreHash,
-                          })?.ScoreInfo);
+            // The custom intro beatmap is a standalone entry, so it would otherwise never be checked.
+            if (useCustomIntroSwitch.Current.Value)
+                ensureScoreResolved(currentProfile.Value.IntroBeatmap.Value);
 
-            return currentProfile.Value.Beatmaps.All(b => b.ShowcaseScore != null);
+            return missingScoreCount == 0;
+        }
+
+        private void ensureScoreResolved(ShowcaseBeatmap beatmap)
+        {
+            if (beatmap.ShowcaseScore != null && !string.IsNullOrEmpty(beatmap.ShowcaseScore.Hash))
+                return;
+
+            beatmap.ShowcaseScore = beatmap.ResolveScoreInfo(scoreManager);
+        }
+
+        private int missingScoreCount
+        {
+            get
+            {
+                int missing = currentProfile.Value.Beatmaps.Count(b => b.ShowcaseScore == null);
+
+                if (useCustomIntroSwitch.Current.Value && currentProfile.Value.IntroBeatmap.Value.ShowcaseScore == null)
+                    missing++;
+
+                return missing;
+            }
         }
 
         private void startShowcase()
@@ -489,8 +507,7 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
 
             if (!checkAndFetchScores())
             {
-                int missing = currentProfile.Value.Beatmaps.Count(b => b.ShowcaseScore == null);
-                dialogOverlay?.Push(new ScoreMissingDialog(missing, launchAction));
+                dialogOverlay?.Push(new ScoreMissingDialog(missingScoreCount, launchAction));
             }
             else
             {

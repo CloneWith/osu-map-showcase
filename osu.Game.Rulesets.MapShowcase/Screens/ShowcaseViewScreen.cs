@@ -16,6 +16,7 @@ using osu.Framework.Threading;
 using osu.Game.Beatmaps;
 using osu.Game.Overlays;
 using osu.Game.Rulesets.Mods;
+using osu.Game.Rulesets.MapShowcase.Utils;
 using osu.Game.Scoring;
 using osu.Game.Screens.Play.HUD;
 using osuTK;
@@ -383,13 +384,9 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
                 hideInfoDisplay();
             }
 
-            beatmap = beatmapManager.GetWorkingBeatmap(new BeatmapInfo
-            {
-                OnlineID = selected.BeatmapId,
-                Hash = selected.BeatmapHash,
-            }, true);
+            WorkingBeatmap? localBeatmap = selected.GetLocalWorkingBeatmap(beatmapManager);
 
-            if (beatmap.BeatmapInfo.BeatmapSet == null)
+            if (localBeatmap?.BeatmapInfo.BeatmapSet == null)
             {
                 showcaseContainer.ErrorStack.Push(new ShowcaseBeatmapMissingScreen(selected));
 
@@ -397,25 +394,23 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
                 return;
             }
 
+            beatmap = localBeatmap;
+
             var ruleset = (rulesetStore.GetRuleset(selected.RulesetId) ?? config.FallbackRuleset.Value).CreateInstance();
             Ruleset.Value = ruleset.RulesetInfo;
 
-            if (selected.ShowcaseScore != null)
+            Score? fetchedScore = selected.GetLocalScore(scoreManager);
+
+            if (fetchedScore != null)
             {
-                var fetchedScore = scoreManager.GetScore(selected.ShowcaseScore);
-
-                if (fetchedScore == null)
-                {
-                    Logger.Error(null, $"Could not find a score for {selected.ShowcaseScore}. Skipping.");
-                    pushNextBeatmap();
-                    return;
-                }
-
                 score = fetchedScore;
                 Mods.Value = score.ScoreInfo.Mods;
             }
             else
             {
+                if (selected.ShowcaseScore != null || !string.IsNullOrEmpty(selected.ScoreHash) || selected.ScoreOnlineId > 0)
+                    Logger.Log($"Could not find a local replay for beatmap \"{selected.BeatmapHash}\". Falling back to autoplay.");
+
                 var autoplayMod = ruleset.GetAutoplayMod();
 
                 if (autoplayMod == null)

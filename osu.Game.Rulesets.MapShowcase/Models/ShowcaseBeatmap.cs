@@ -38,6 +38,15 @@ namespace osu.Game.Rulesets.MapShowcase.Models
         public string ScoreHash = string.Empty;
 
         /// <summary>
+        /// The online ID of the associated score.
+        /// </summary>
+        /// <remarks>
+        /// Scores picked from the online leaderboard carry no local hash, so this is the only way to re-associate them
+        /// with a local replay once it has been downloaded.
+        /// </remarks>
+        public long ScoreOnlineId = -1;
+
+        /// <summary>
         /// Whether the information of the map should be shown actively in the mappool and during showcase.
         /// </summary>
         /// <remarks>Only automatically applies to TB maps for now.</remarks>

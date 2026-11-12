@@ -34,6 +34,7 @@ using osu.Game.Online.Chat;
 using osu.Game.Online.Placeholders;
 using osu.Game.Overlays;
 using osu.Game.Rulesets.Mods;
+using osu.Game.Rulesets.MapShowcase.Utils;
 using osu.Game.Scoring;
 using osu.Game.Screens.Play.HUD;
 using osu.Game.Screens.Select;
@@ -168,9 +169,9 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
                     Schedule(() => ownerAvatar!.User = foundUser);
                 }
 
-                workingBeatmap = beatmapManager.GetWorkingBeatmap(new BeatmapInfo { Hash = item.BeatmapHash }, true);
+                workingBeatmap = item.GetLocalWorkingBeatmap(beatmapManager);
 
-                if (workingBeatmap?.BeatmapInfo.BeatmapSet == null || ReferenceEquals(workingBeatmap, beatmapManager.DefaultBeatmap))
+                if (workingBeatmap?.BeatmapInfo.BeatmapSet == null)
                 {
                     beatmapInfo = await beatmapLookupCache.GetBeatmapAsync(item.BeatmapId).ConfigureAwait(false);
                 }
@@ -222,10 +223,8 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
             Item.ModString.BindValueChanged(_ => updateModIcon());
             Item.ModIndex.BindValueChanged(_ => updateModIcon());
 
-            Item.ShowcaseScore = scoreManager.GetScore(new ScoreInfo
-            {
-                Hash = Item.ScoreHash,
-            })?.ScoreInfo;
+            // ShowcaseScore is not persisted, so profiles loaded from disk only carry the hashes of their scores.
+            Item.ShowcaseScore = Item.ResolveScoreInfo(scoreManager);
 
             ShowEditSection.BindValueChanged(e => editFlow.FadeTo(e.NewValue ? 1 : 0, 300, Easing.OutQuint));
         }
@@ -649,6 +648,7 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
                     {
                         item.ShowcaseScore = null;
                         item.ScoreHash = string.Empty;
+                        item.ScoreOnlineId = -1;
                         recordScoreContainer.Child = new MessagePlaceholder(MapShowcaseStrings.NoScoreAssociationPrompt);
                     }));
                 }
@@ -668,6 +668,7 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
             {
                 Item.ShowcaseScore = score;
                 Item.ScoreHash = Item.ShowcaseScore?.Hash ?? string.Empty;
+                Item.ScoreOnlineId = Item.ShowcaseScore?.OnlineID ?? -1;
             }
 
             if (result.HasFlag(SelectResult.BeatmapUpdated))
