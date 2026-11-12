@@ -19,7 +19,6 @@ using osu.Game.Rulesets.MapShowcase.Mods;
 using osu.Game.Rulesets.MapShowcase.UI;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Rulesets.UI;
-using osuTK;
 
 namespace osu.Game.Rulesets.MapShowcase
 {
@@ -74,7 +73,7 @@ namespace osu.Game.Rulesets.MapShowcase
                 {
                     Anchor = Anchor.Centre,
                     Origin = Anchor.Centre,
-                    Size = new Vector2(20),
+                    RelativeSizeAxes = Axes.Both,
                     Icon = OsuIcon.Ranking,
                 };
             }
