@@ -1,0 +1,122 @@
+on: [push, pull_request]
+name: Continuous Integration
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  inspect-code:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install .NET 10.0.x
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore Tools
+        run: dotnet tool restore
+
+      - name: Restore Packages
+        run: dotnet restore osu.Game.Rulesets.MapShowcase.slnx
+
+      - name: Restore InspectCode cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ github.workspace }}/inspectcode
+          key: inspectcode-${{ hashFiles('dotnet-tools.json', '.github/workflows/ci.yml', 'osu.sln*', '.editorconfig', '**/*.csproj', '**/*.props') }}
+
+      - name: Dotnet code style
+        run: dotnet build -c Debug -warnaserror osu.Game.Rulesets.MapShowcase.slnx -p:EnforceCodeStyleInBuild=true
+
+      - name: InspectCode
+        uses: JetBrains/ReSharper-InspectCode@v2026.3.0
+        with:
+          build: false
+          no-build: true
+          solution: ./osu.Game.Rulesets.MapShowcase.slnx
+          caches-home: inspectcode
+          verbosity: WARN
+
+  test:
+    name: Build and test (${{ matrix.os.prettyname }})
+    runs-on: ${{ matrix.os.fullname }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - { prettyname: Windows, fullname: windows-latest }
+          - { prettyname: Linux, fullname: ubuntu-latest }
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install .NET 10.0.x
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: |
+            **/*.csproj
+            Directory.Build.props
+
+      - name: Compile
+        run: dotnet build -c Debug osu.Game.Rulesets.MapShowcase.slnx
+
+      # Explicit tests are skipped by NUnit, which is what keeps the full-client harness out of CI.
+      - name: Test
+        run: >
+          dotnet test
+          osu.Game.Rulesets.MapShowcase.Tests/bin/Debug/net10.0/osu.Game.Rulesets.MapShowcase.Tests.dll
+          --logger "trx;LogFileName=TestResults-${{ matrix.os.prettyname }}.trx"
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: osu-map-showcase-test-results-${{ matrix.os.prettyname }}
+          path: ${{ github.workspace }}/TestResults/TestResults-${{ matrix.os.prettyname }}.trx
+          retention-days: 14
+
+  package:
+    name: Package
+    runs-on: ubuntu-latest
+    needs: test
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install .NET 10.0.x
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: |
+            **/*.csproj
+            Directory.Build.props
+
+      - name: Compile ruleset
+        run: dotnet build -c Release osu.Game.Rulesets.MapShowcase/osu.Game.Rulesets.MapShowcase.csproj
+
+      # Dropping a build of a pull request into a client's Rulesets directory is the fastest way to try a change.
+      - name: Upload ruleset
+        uses: actions/upload-artifact@v7
+        with:
+          name: osu.Game.Rulesets.MapShowcase-${{ github.sha }}
+          path: |
+            osu.Game.Rulesets.MapShowcase/bin/Release/net10.0/osu.Game.Rulesets.MapShowcase.dll
+            osu.Game.Rulesets.MapShowcase/bin/Release/net10.0/osu.Game.Rulesets.MapShowcase.pdb
+            osu.Game.Rulesets.MapShowcase/bin/Release/net10.0/zh/osu.Game.Rulesets.MapShowcase.resources.dll
+          retention-days: 14

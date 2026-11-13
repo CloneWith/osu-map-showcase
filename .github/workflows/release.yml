@@ -1,0 +1,150 @@
+name: Release
+run-name: Release (${{ inputs.version || github.ref_name }})
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 1.2.3)"
+        required: true
+      publish:
+        type: boolean
+        description: "Whether to generate a release on complete"
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install .NET 10.0.x
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: |
+            **/*.csproj
+            Directory.Build.props
+
+      # A version that NuGet cannot parse fails the build much later and with a worse message than this does.
+      - name: Resolve version
+        id: version
+        shell: bash
+        env:
+          # Passed through the environment so that a tag or input cannot be interpreted as shell syntax.
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            raw="$INPUT_VERSION"
+            tag="v${raw#v}"
+          else
+            raw="$REF_NAME"
+            tag="$raw"
+          fi
+
+          version="${raw#v}"
+
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::'$raw' is not a valid version; expected something like 1.2.3 or v1.2.3."
+            exit 1
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Releasing $tag (assembly version $version)."
+
+      - name: Compile
+        run: dotnet build -c Release osu.Game.Rulesets.MapShowcase.slnx -p:Version=${{ steps.version.outputs.version }}
+
+      - name: Test
+        run: >
+          dotnet test
+          osu.Game.Rulesets.MapShowcase.Tests/bin/Release/net10.0/osu.Game.Rulesets.MapShowcase.Tests.dll
+          --logger "trx;LogFileName=TestResults-Release.trx"
+
+      - name: Stage package
+        shell: bash
+        run: |
+          out="osu.Game.Rulesets.MapShowcase/bin/Release/net10.0"
+          package="dist/osu.Game.Rulesets.MapShowcase"
+          mkdir -p "$package/zh"
+
+          cp "$out/osu.Game.Rulesets.MapShowcase.dll" "$package/"
+          cp "$out/osu.Game.Rulesets.MapShowcase.pdb" "$package/"
+          cp "$out/osu.Game.Rulesets.MapShowcase.xml" "$package/"
+          # Localisation lives in a satellite assembly, which has to travel next to the ruleset.
+          cp "$out/zh/osu.Game.Rulesets.MapShowcase.resources.dll" "$package/zh/"
+
+          (cd dist && zip -r "osu.Game.Rulesets.MapShowcase-${{ steps.version.outputs.tag }}.zip" osu.Game.Rulesets.MapShowcase)
+
+      - name: Write release notes
+        if: ${{ inputs.publish }}
+        shell: bash
+        run: |
+          previous="$(git describe --tags --abbrev=0 "${{ steps.version.outputs.tag }}^" 2>/dev/null || true)"
+          compare="https://github.com/${{ github.repository }}/commits/${{ steps.version.outputs.tag }}"
+
+          if [ -n "$previous" ]; then
+            compare="https://github.com/${{ github.repository }}/compare/$previous...${{ steps.version.outputs.tag }}"
+          fi
+
+          cat > release-notes.md <<EOF
+          Builds of the ruleset on their own, for dropping into an osu!lazer install.
+
+          ## Install
+
+          Copy \`osu.Game.Rulesets.MapShowcase.dll\` into the client's \`Rulesets\` directory, keeping the \`zh\` folder
+          next to it if you want the Chinese translation, then restart the client.
+
+          The showcase is then reachable from *Settings → Mappool Showcase → Open showcase list*, or by selecting the
+          ruleset in song select.
+
+          ## Changes
+
+          $compare
+          EOF
+
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          name: osu.Game.Rulesets.MapShowcase-${{ steps.version.outputs.tag }}
+          path: dist/osu.Game.Rulesets.MapShowcase-${{ steps.version.outputs.tag }}.zip
+          retention-days: 30
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: osu-map-showcase-test-results-Release
+          path: ${{ github.workspace }}/TestResults/TestResults-Release.trx
+          retention-days: 30
+
+      - name: Publish release
+        if: ${{ inputs.publish }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: >
+          gh release create "${{ steps.version.outputs.tag }}"
+          "dist/osu.Game.Rulesets.MapShowcase-${{ steps.version.outputs.tag }}.zip"
+          --title "${{ steps.version.outputs.tag }}"
+          --notes-file release-notes.md
