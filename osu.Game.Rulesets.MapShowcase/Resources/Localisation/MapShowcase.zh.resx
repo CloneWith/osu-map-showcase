@@ -28,9 +28,6 @@
     <data name="intro_beatmap_header" xml:space="preserve">
         <value>开场谱面</value>
     </data>
-    <data name="current_profile" xml:space="preserve">
-        <value>当前配置文件</value>
-    </data>
     <data name="default_ruleset" xml:space="preserve">
         <value>默认游戏模式</value>
     </data>
@@ -45,9 +42,6 @@
     </data>
     <data name="comment" xml:space="preserve">
         <value>注释</value>
-    </data>
-    <data name="current_profile_description" xml:space="preserve">
-        <value>要加载与编辑的配置文件。&#xA;可以在数据目录的 "showcase" 文件夹下找到这些文件。</value>
     </data>
     <data name="default_ruleset_description" xml:space="preserve">
         <value>展示谱面默认使用与备用的游戏模式。</value>
@@ -316,11 +310,5 @@
     </data>
     <data name="ruleset_description" xml:space="preserve">
         <value>用于赛事图池的自动展示。</value>
-    </data>
-    <data name="intro_overlay_description" xml:space="preserve">
-        <value>无需手动操作客户端即可展示赛事图池的规则集。展示配置就是 osu! 数据目录下“showcase”文件夹中的 JSON 文件。</value>
-    </data>
-    <data name="intro_overlay_show_on_selection" xml:space="preserve">
-        <value>每次选中该规则集时显示此说明</value>
     </data>
 </root>

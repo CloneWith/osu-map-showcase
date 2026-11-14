@@ -3,11 +3,7 @@
 
 using System;
 using osu.Framework.Allocation;
-using osu.Framework.Graphics;
 using osu.Framework.Screens;
-using osu.Game.Graphics;
-using osu.Game.Graphics.Containers;
-using osu.Game.Overlays;
 using osu.Game.Overlays.Settings;
 using osu.Game.Rulesets.MapShowcase.Configuration;
 using osu.Game.Screens.Menu;
@@ -23,7 +19,7 @@ namespace osu.Game.Rulesets.MapShowcase.UI
         [BackgroundDependencyLoader]
         private void load()
         {
-            if (Config is not MapShowcaseConfigManager config)
+            if (Config is not MapShowcaseConfigManager)
                 return;
 
             Children =
@@ -35,27 +31,6 @@ namespace osu.Game.Rulesets.MapShowcase.UI
                     {
                         performer?.PerformFromScreen(screen => screen.Push(new ShowcaseScreen()), valid_screens);
                     },
-                },
-                new OsuTextFlowContainer(t =>
-                {
-                    t.Font = t.Font.With(size: 12);
-                    t.Colour = OsuColour.Gray(0.6f);
-                })
-                {
-                    RelativeSizeAxes = Axes.X,
-                    AutoSizeAxes = Axes.Y,
-                    Margin = new MarginPadding
-                    {
-                        Horizontal = SettingsPanel.CONTENT_MARGINS,
-                        Top = 4,
-                    },
-                    Text = MapShowcaseStrings.OpenShowcaseDescription.ToString(),
-                },
-                new SettingsCheckbox
-                {
-                    LabelText = MapShowcaseStrings.IntroOverlayShowOnSelection,
-                    Current = config.GetBindable<bool>(MapShowcaseSetting.ShowIntroOverlay),
-                    Margin = new MarginPadding { Top = 10 },
                 },
             ];
         }

@@ -30,18 +30,6 @@ namespace osu.Game.Rulesets.MapShowcase.Resources
         public static LocalisableString RulesetDescription => new TranslatableString(getKey(@"ruleset_description"), @"Automatic showcase for tournament map pools.");
 
         /// <summary>
-        /// "A ruleset for showing off a tournament map pool without driving the client by hand."
-        /// </summary>
-        public static LocalisableString IntroOverlayDescription => new TranslatableString(getKey(@"intro_overlay_description"),
-            @"A ruleset for showing off a tournament map pool without driving the client by hand.");
-
-        /// <summary>
-        /// "Show this introduction whenever this ruleset is selected"
-        /// </summary>
-        public static LocalisableString IntroOverlayShowOnSelection => new TranslatableString(getKey(@"intro_overlay_show_on_selection"),
-            @"Show this introduction whenever this ruleset is selected");
-
-        /// <summary>
         /// "Tournament Information"
         /// </summary>
         public static LocalisableString TournamentInfoHeader => new TranslatableString(getKey(@"tournament_info_header"), @"Tournament Information");
@@ -101,16 +89,6 @@ namespace osu.Game.Rulesets.MapShowcase.Resources
         /// </summary>
         public static LocalisableString NewFilenamePrompt(string filename)
             => new TranslatableString(getKey(@"new_filename_prompt"), @"The new filename would be ""{0}"".", filename);
-
-        /// <summary>
-        /// "Current Profile"
-        /// </summary>
-        public static LocalisableString CurrentProfile => new TranslatableString(getKey(@"current_profile"), @"Current Profile");
-
-        /// <summary>
-        /// "The profile to be loaded and edited. You can find the files under the &quot;showcase&quot; directory of the data path."
-        /// </summary>
-        public static LocalisableString CurrentProfileDescription => new TranslatableString(getKey(@"current_profile_description"), @"The profile to be loaded and edited. You can find the files under the ""showcase"" directory of the data path.");
 
         /// <summary>
         /// "Default Ruleset"

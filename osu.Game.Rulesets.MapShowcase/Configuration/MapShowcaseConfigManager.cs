@@ -12,19 +12,9 @@ namespace osu.Game.Rulesets.MapShowcase.Configuration
     public class MapShowcaseConfigManager(SettingsStore? settings, RulesetInfo ruleset, int? variant = null)
         : RulesetConfigManager<MapShowcaseSetting>(settings!, ruleset, variant)
     {
-        protected override void InitialiseDefaults()
-        {
-            base.InitialiseDefaults();
-
-            SetDefault(MapShowcaseSetting.ShowIntroOverlay, true);
-        }
     }
 
     public enum MapShowcaseSetting
     {
-        /// <summary>
-        /// Whether the informational overlay is shown whenever this ruleset becomes the selected ruleset.
-        /// </summary>
-        ShowIntroOverlay,
     }
 }
