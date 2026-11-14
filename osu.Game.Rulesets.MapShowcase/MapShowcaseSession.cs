@@ -7,7 +7,6 @@ using osu.Framework.Graphics.Textures;
 using osu.Framework.IO.Stores;
 using osu.Framework.Logging;
 using osu.Framework.Platform;
-using osu.Game.Rulesets.MapShowcase.Overlays;
 
 namespace osu.Game.Rulesets.MapShowcase
 {
@@ -41,8 +40,6 @@ namespace osu.Game.Rulesets.MapShowcase
                     return;
 
                 Storage = findExistingStorage(dependencies) ?? createStorage(dependencies);
-
-                game.Add(new MapShowcaseIntroOverlay());
             }
             catch (Exception e)
             {
