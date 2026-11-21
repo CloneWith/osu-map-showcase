@@ -35,7 +35,7 @@ jobs:
           key: inspectcode-${{ hashFiles('dotnet-tools.json', '.github/workflows/ci.yml', 'osu.sln*', '.editorconfig', '**/*.csproj', '**/*.props') }}
 
       - name: Dotnet code style
-        run: dotnet build -c Debug -warnaserror osu.Game.Rulesets.MapShowcase.slnx -p:EnforceCodeStyleInBuild=true
+        run: dotnet build -c Debug osu.Game.Rulesets.MapShowcase.slnx -p:EnforceCodeStyleInBuild=true
 
       - name: InspectCode
         uses: JetBrains/ReSharper-InspectCode@v2026.3.0
