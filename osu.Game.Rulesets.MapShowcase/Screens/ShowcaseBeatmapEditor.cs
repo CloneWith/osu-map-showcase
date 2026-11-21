@@ -105,8 +105,7 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
         {
             base.Dispose(isDisposing);
 
-            if (Config.Value != null)
-                Config.Value.Beatmaps.CollectionChanged -= onBeatmapsChanged;
+            Config.Value?.Beatmaps.CollectionChanged -= onBeatmapsChanged;
         }
     }
 }
