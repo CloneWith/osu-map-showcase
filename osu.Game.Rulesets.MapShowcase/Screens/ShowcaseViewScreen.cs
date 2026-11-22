@@ -395,6 +395,7 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
             }
 
             beatmap = localBeatmap;
+            selected.BeatmapInfo = localBeatmap.BeatmapInfo;
 
             var ruleset = (rulesetStore.GetRuleset(selected.RulesetId) ?? config.FallbackRuleset.Value).CreateInstance();
             Ruleset.Value = ruleset.RulesetInfo;

@@ -115,7 +115,7 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
                 {
                     RelativePositionAxes = Axes.Both,
                     RelativeSizeAxes = Axes.None,
-                    Width = 400,
+                    Width = 560,
                     Alpha = 0,
                     X = -0.01f,
                     Y = 0.2f,

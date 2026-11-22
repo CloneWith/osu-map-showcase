@@ -311,4 +311,22 @@
     <data name="ruleset_description" xml:space="preserve">
         <value>用于赛事图池的自动展示。</value>
     </data>
+    <data name="automatically_download_replays" xml:space="preserve">
+        <value>自动下载选中的回放</value>
+    </data>
+    <data name="replay_missing_title" xml:space="preserve">
+        <value>回放尚未下载</value>
+    </data>
+    <data name="replay_missing_text" xml:space="preserve">
+        <value>要现在下载此回放吗？</value>
+    </data>
+    <data name="download_replay" xml:space="preserve">
+        <value>下载回放</value>
+    </data>
+    <data name="always_download_replays" xml:space="preserve">
+        <value>以后自动下载</value>
+    </data>
+    <data name="profile_saved_notification" xml:space="preserve">
+        <value>展示配置已保存</value>
+    </data>
 </root>

@@ -11,8 +11,14 @@ using osu.Framework.Screens;
 using osu.Game.Beatmaps;
 using osu.Game.Overlays;
 using osu.Game.Overlays.Notifications;
+using osu.Game.Overlays.Dialog;
+using osu.Game.Rulesets.Configuration;
+using osu.Game.Rulesets.MapShowcase.Configuration;
 using osu.Game.Rulesets.Mods;
+using osu.Game.Rulesets;
 using osu.Game.Scoring;
+using osu.Game.Online;
+using osu.Game.Screens;
 using osu.Game.Screens.Select;
 using osu.Game.Screens.OnlinePlay;
 
@@ -32,16 +38,48 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
         [Resolved]
         private INotificationOverlay? notificationOverlay { get; set; }
 
+        [Resolved]
+        private IDialogOverlay? dialogOverlay { get; set; }
+
+        [Resolved]
+        private ScoreManager scoreManager { get; set; } = null!;
+
+        [Resolved]
+        private ScoreModelDownloader scoreDownloader { get; set; } = null!;
+
+        [Resolved]
+        private IRulesetConfigCache rulesetConfigCache { get; set; } = null!;
+
+        [Resolved]
+        private BeatmapManager beatmapManager { get; set; } = null!;
+
+        [Resolved]
+        private RulesetStore rulesetStore { get; set; } = null!;
+
         private SelectResult status = SelectResult.None;
 
         private readonly ShowcaseBeatmap? oldItem;
+        private readonly BeatmapInfo? initialBeatmap;
 
-        public ShowcaseSongSelect(ShowcaseBeatmap? oldItem = null)
+        public ShowcaseSongSelect(ShowcaseBeatmap? oldItem = null, BeatmapInfo? initialBeatmap = null)
         {
             this.oldItem = oldItem;
+            this.initialBeatmap = initialBeatmap;
 
             Padding = new MarginPadding { Horizontal = HORIZONTAL_OVERFLOW_PADDING };
             TopPadding = Header.HEIGHT - 10;
+        }
+
+        protected override void LoadComplete()
+        {
+            base.LoadComplete();
+
+            if (initialBeatmap == null || oldItem == null)
+                return;
+
+            var ruleset = rulesetStore.GetRuleset(oldItem.RulesetId);
+            if (ruleset != null)
+                ((IHandlePresentBeatmap)this).PresentBeatmap(beatmapManager.GetWorkingBeatmap(initialBeatmap), ruleset);
         }
 
         protected override void OnStart()
@@ -70,6 +108,43 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
                 return;
             }
 
+            var config = rulesetConfigCache.GetConfigFor(new MapShowcaseRuleset()) as MapShowcaseConfigManager;
+
+            if (score.HasOnlineReplay && scoreManager.GetScore(score)?.Replay.Frames.Count is not > 0)
+            {
+                void beginDownload()
+                {
+                    var tracker = new ScoreDownloadTracker(score);
+                    AddInternal(tracker);
+                    tracker.State.BindValueChanged(state =>
+                    {
+                        if (state.NewValue != DownloadState.LocallyAvailable)
+                            return;
+
+                        tracker.RemoveAndDisposeImmediately();
+                        commitScoreSelection(score);
+                    });
+                    scoreDownloader.Download(score);
+                }
+
+                if (config?.GetBindable<bool>(MapShowcaseSetting.AutomaticallyDownloadReplays).Value == true)
+                    beginDownload();
+                else
+                    dialogOverlay?.Push(new ReplayMissingDialog(beginDownload, () =>
+                    {
+                        if (config != null)
+                            config.GetBindable<bool>(MapShowcaseSetting.AutomaticallyDownloadReplays).Value = true;
+                        beginDownload();
+                    }));
+
+                return;
+            }
+
+            commitScoreSelection(score);
+        }
+
+        private void commitScoreSelection(ScoreInfo score)
+        {
             updateSelectResult();
             status |= SelectResult.ScoreUpdated;
 

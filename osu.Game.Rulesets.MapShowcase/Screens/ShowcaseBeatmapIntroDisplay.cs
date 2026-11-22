@@ -28,7 +28,7 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
         /// <summary>
         /// The size of the information panel. Matches the width of the persistent wedge it hands over to.
         /// </summary>
-        private const float panel_width = 400;
+        private const float panel_width = 560;
 
         /// <summary>
         /// The horizontal distance the information panel slides in from.

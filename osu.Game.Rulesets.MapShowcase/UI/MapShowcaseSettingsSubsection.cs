@@ -3,11 +3,14 @@
 
 using System;
 using osu.Framework.Allocation;
+using osu.Framework.Graphics;
 using osu.Framework.Screens;
 using osu.Game.Overlays.Settings;
+using osu.Game.Rulesets.Configuration;
 using osu.Game.Rulesets.MapShowcase.Configuration;
 using osu.Game.Screens.Menu;
 using osu.Game.Screens.Select;
+using osu.Game.Graphics.UserInterfaceV2;
 
 namespace osu.Game.Rulesets.MapShowcase.UI
 {
@@ -24,6 +27,14 @@ namespace osu.Game.Rulesets.MapShowcase.UI
 
             Children =
             [
+                new SettingsItemV2(new FormCheckBox
+                {
+                    Caption = MapShowcaseStrings.AutomaticallyDownloadReplays,
+                    Current = ((MapShowcaseConfigManager)Config).GetBindable<bool>(MapShowcaseSetting.AutomaticallyDownloadReplays),
+                })
+                {
+                    Margin = new MarginPadding { Bottom = 8 },
+                },
                 new SettingsButton
                 {
                     Text = MapShowcaseStrings.OpenShowcase,

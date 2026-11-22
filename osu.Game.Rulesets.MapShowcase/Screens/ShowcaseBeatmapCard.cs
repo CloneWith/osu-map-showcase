@@ -7,9 +7,13 @@ using osu.Framework.Graphics.Colour;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Effects;
 using osu.Framework.Graphics.Shapes;
+using osu.Framework.Graphics.Sprites;
+using osu.Framework.Allocation;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Backgrounds;
 using osu.Game.Graphics.Sprites;
+using osu.Game.Beatmaps.Drawables;
+using osu.Game.Beatmaps;
 using osu.Game.Overlays;
 using osu.Game.Rulesets.MapShowcase.Graphics;
 using osuTK;
@@ -36,8 +40,19 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
         /// </summary>
         private const float mod_text_spacing = 12;
 
+        private readonly ShowcaseBeatmap beatmap;
+        private Container cardBack = null!;
+        private Sprite cardBackground = null!;
+
+        [BackgroundDependencyLoader]
+        private void load(BeatmapManager beatmapManager)
+        {
+            cardBackground.Texture = beatmapManager.GetWorkingBeatmap(beatmap.BeatmapInfo).GetBackground();
+        }
+
         public ShowcaseBeatmapCard(ShowcaseBeatmap showcaseBeatmap, OverlayColourScheme? colourScheme = null)
         {
+            beatmap = showcaseBeatmap;
             var colourProvider = new OverlayColourProvider(colourScheme ?? OverlayColourScheme.Blue);
 
             string mod = showcaseBeatmap.ModString.Value;
@@ -65,14 +80,8 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
                             Radius = 5,
                             Colour = Color4.Black.Opacity(0.1f),
                         },
-                        Child = new Box
-                        {
-                            RelativeSizeAxes = Axes.Both,
-                            Alpha = 0,
-                            AlwaysPresent = true,
-                        },
                     },
-                    new Container
+                    cardBack = new Container
                     {
                         Name = @"Card back",
                         RelativeSizeAxes = Axes.Both,
@@ -80,10 +89,15 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
                         CornerRadius = CORNER_RADIUS,
                         Children =
                         [
+                            cardBackground = new Sprite
+                            {
+                                RelativeSizeAxes = Axes.Both,
+                                FillMode = FillMode.Fill,
+                            },
                             new Box
                             {
                                 RelativeSizeAxes = Axes.Both,
-                                Colour = ColourInfo.GradientVertical(colourProvider.Background3, colourProvider.Background4),
+                                Colour = ColourInfo.GradientVertical(colourProvider.Background3.Opacity(0.45f), colourProvider.Background4.Opacity(0.45f)),
                             },
                             new TrianglesV2
                             {

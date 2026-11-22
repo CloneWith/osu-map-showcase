@@ -23,6 +23,7 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
 
         [Cached]
         private readonly ScreenStack screenStack = new OsuScreenStack { RelativeSizeAxes = Axes.Both };
+        private Header header = null!;
 
         [Resolved]
         private RulesetStore rulesets { get; set; } = null!;
@@ -50,8 +51,16 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
                     RelativeSizeAxes = Axes.Both,
                     Child = screenStack,
                 },
-                new Header(MapShowcaseStrings.ShowcaseTitle, screenStack),
+                header = new Header(MapShowcaseStrings.ShowcaseTitle, screenStack),
             ];
+
+            screenStack.ScreenPushed += (_, _) => updateHeaderVisibility();
+            screenStack.ScreenExited += (_, _) => updateHeaderVisibility();
+        }
+
+        private void updateHeaderVisibility()
+        {
+            header.Alpha = screenStack.CurrentScreen is ShowcaseSongSelect ? 0 : 1;
         }
 
         protected override void LoadComplete()
