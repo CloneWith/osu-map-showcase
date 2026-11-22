@@ -12,7 +12,6 @@ using osu.Framework.Allocation;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Backgrounds;
 using osu.Game.Graphics.Sprites;
-using osu.Game.Beatmaps.Drawables;
 using osu.Game.Beatmaps;
 using osu.Game.Overlays;
 using osu.Game.Rulesets.MapShowcase.Graphics;
@@ -41,8 +40,7 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
         private const float mod_text_spacing = 12;
 
         private readonly ShowcaseBeatmap beatmap;
-        private Container cardBack = null!;
-        private Sprite cardBackground = null!;
+        private readonly Sprite cardBackground;
 
         [BackgroundDependencyLoader]
         private void load(BeatmapManager beatmapManager)
@@ -81,7 +79,7 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
                             Colour = Color4.Black.Opacity(0.1f),
                         },
                     },
-                    cardBack = new Container
+                    new Container
                     {
                         Name = @"Card back",
                         RelativeSizeAxes = Axes.Both,

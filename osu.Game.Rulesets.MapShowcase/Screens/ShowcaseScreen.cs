@@ -23,6 +23,7 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
 
         [Cached]
         private readonly ScreenStack screenStack = new OsuScreenStack { RelativeSizeAxes = Axes.Both };
+
         private Header header = null!;
 
         [Resolved]

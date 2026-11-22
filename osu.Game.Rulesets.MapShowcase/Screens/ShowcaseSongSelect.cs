@@ -11,14 +11,10 @@ using osu.Framework.Screens;
 using osu.Game.Beatmaps;
 using osu.Game.Overlays;
 using osu.Game.Overlays.Notifications;
-using osu.Game.Overlays.Dialog;
-using osu.Game.Rulesets.Configuration;
 using osu.Game.Rulesets.MapShowcase.Configuration;
 using osu.Game.Rulesets.Mods;
-using osu.Game.Rulesets;
 using osu.Game.Scoring;
 using osu.Game.Online;
-using osu.Game.Screens;
 using osu.Game.Screens.Select;
 using osu.Game.Screens.OnlinePlay;
 

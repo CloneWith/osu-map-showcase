@@ -6,7 +6,6 @@ using osu.Framework.Allocation;
 using osu.Framework.Graphics;
 using osu.Framework.Screens;
 using osu.Game.Overlays.Settings;
-using osu.Game.Rulesets.Configuration;
 using osu.Game.Rulesets.MapShowcase.Configuration;
 using osu.Game.Screens.Menu;
 using osu.Game.Screens.Select;
