@@ -60,7 +60,7 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
 
         private void updateHeaderVisibility()
         {
-            header.Alpha = screenStack.CurrentScreen is ShowcaseSongSelect ? 0 : 1;
+            header.Alpha = screenStack.CurrentScreen is ShowcaseSongSelect or ShowcaseViewScreen ? 0 : 1;
         }
 
         protected override void LoadComplete()
