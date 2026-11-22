@@ -23,6 +23,7 @@ using osu.Game.Graphics.UserInterfaceV2;
 using osu.Game.Overlays;
 using osu.Game.Overlays.Dialog;
 using osu.Game.Overlays.Notifications;
+using osu.Game.Overlays.OSD;
 using osu.Game.Overlays.Toolbar;
 using osu.Game.Scoring;
 using osu.Game.Screens.Footer;
@@ -52,6 +53,9 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
 
         [Resolved]
         private INotificationOverlay? notificationOverlay { get; set; }
+
+        [Resolved]
+        private OnScreenDisplay? onScreenDisplay { get; set; }
 
         private const float sizing_duration = 200;
 
@@ -245,7 +249,7 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
                     new DrawableShowcaseBeatmapItem(currentProfile.Value.IntroBeatmap.Value, currentProfile.Value)
                     {
                         AllowEditingDetails = false,
-                        AllowDeletion = false,
+                        AllowDeletion = true,
                         ShowItemOwner = false,
                     },
                 ],
@@ -370,6 +374,8 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
                         {
                             RulesetId = rulesetInfo.OnlineID,
                             ScoreHash = scoreInfo?.Hash ?? string.Empty,
+                            ScoreOnlineId = scoreInfo?.OnlineID ?? -1,
+                            ShowcaseScore = scoreInfo,
                         };
 
                         newBeatmap.RequiredMods.AddRange(mods);
@@ -384,7 +390,10 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
                 Action = () =>
                 {
                     if (checkConfig(false))
+                    {
                         storage.SaveChanges(currentProfile.Value);
+                        onScreenDisplay?.Display(new ProfileSavedToast());
+                    }
                 },
             },
             new FooterButtonStartShowcase
@@ -596,5 +605,13 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
     {
         General,
         Beatmaps,
+    }
+
+    internal partial class ProfileSavedToast : Toast
+    {
+        public ProfileSavedToast()
+            : base(MapShowcaseStrings.ShowcaseTitle, MapShowcaseStrings.ProfileSavedNotification)
+        {
+        }
     }
 }

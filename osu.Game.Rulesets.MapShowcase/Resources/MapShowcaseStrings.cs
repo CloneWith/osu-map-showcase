@@ -488,6 +488,13 @@ namespace osu.Game.Rulesets.MapShowcase.Resources
         public static LocalisableString ScoreMissingProceed => new TranslatableString(getKey(@"score_missing_proceed"),
             @"Use Autoplay scores for these beatmaps");
 
+        public static LocalisableString AutomaticallyDownloadReplays => new TranslatableString(getKey(@"automatically_download_replays"), @"Automatically download selected replays");
+        public static LocalisableString ProfileSavedNotification => new TranslatableString(getKey(@"profile_saved_notification"), @"Showcase profile saved");
+        public static LocalisableString ReplayMissingTitle => new TranslatableString(getKey(@"replay_missing_title"), @"Replay is not downloaded");
+        public static LocalisableString ReplayMissingText => new TranslatableString(getKey(@"replay_missing_text"), @"Download this replay now?");
+        public static LocalisableString DownloadReplay => new TranslatableString(getKey(@"download_replay"), @"Download replay");
+        public static LocalisableString AlwaysDownloadReplays => new TranslatableString(getKey(@"always_download_replays"), @"Always download");
+
         /// <summary>
         /// "Remove this profile? This cannot be undone."
         /// </summary>

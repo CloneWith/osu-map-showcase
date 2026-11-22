@@ -12,9 +12,15 @@ namespace osu.Game.Rulesets.MapShowcase.Configuration
     public class MapShowcaseConfigManager(SettingsStore? settings, RulesetInfo ruleset, int? variant = null)
         : RulesetConfigManager<MapShowcaseSetting>(settings!, ruleset, variant)
     {
+        protected override void InitialiseDefaults()
+        {
+            base.InitialiseDefaults();
+            SetDefault(MapShowcaseSetting.AutomaticallyDownloadReplays, false);
+        }
     }
 
     public enum MapShowcaseSetting
     {
+        AutomaticallyDownloadReplays,
     }
 }

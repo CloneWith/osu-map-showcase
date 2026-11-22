@@ -131,6 +131,10 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
         [Resolved]
         private ScoreManager scoreManager { get; set; } = null!;
 
+        [Resolved]
+        private IBindable<WorkingBeatmap> globalWorkingBeatmap { get; set; } = null!;
+
+
         private readonly Bindable<string> selectorId;
 
         public DrawableShowcaseBeatmapItem(ShowcaseBeatmap item, ShowcaseConfig parentConfig)
@@ -144,7 +148,7 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
             // TODO: Allocation of actions inside ctor seems strange. Is it helpful to change this?
             RequestEdit = _ =>
             {
-                var select = new ShowcaseSongSelect(Item);
+                var select = new ShowcaseSongSelect(Item, beatmapInfo as BeatmapInfo);
                 select.OnSelect += updateAsNeeded;
                 Schedule(() => performer?.PerformFromScreen(s => s.Push(select), [
                     typeof(ShowcaseConfigScreen),
@@ -152,6 +156,17 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
             };
             RequestDeletion = _ =>
             {
+                if (ReferenceEquals(Item, parentConfig.IntroBeatmap.Value))
+                {
+                    parentConfig.UseCustomIntroBeatmap.Value = false;
+                    ((Bindable<WorkingBeatmap>)globalWorkingBeatmap).Value = beatmapManager.GetWorkingBeatmap(null);
+                    Item.BeatmapHash = string.Empty;
+                    Item.BeatmapId = -1;
+                    Item.BeatmapInfo = new BeatmapInfo();
+                    Refresh(needPopulation: true);
+                    return;
+                }
+
                 parentConfig.Beatmaps.Remove(Item);
                 Expire();
             };
@@ -669,6 +684,7 @@ namespace osu.Game.Rulesets.MapShowcase.Screens
                 Item.ShowcaseScore = score;
                 Item.ScoreHash = Item.ShowcaseScore?.Hash ?? string.Empty;
                 Item.ScoreOnlineId = Item.ShowcaseScore?.OnlineID ?? -1;
+
             }
 
             if (result.HasFlag(SelectResult.BeatmapUpdated))
